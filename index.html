@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>English Bloom Interactive</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f0f0f0; margin:0; padding:0;}
+header { background:#4CAF50; color:white; padding:15px; text-align:center; }
+header a { color:white; text-decoration:none; font-weight:bold; }
+button { padding:10px 20px; margin:5px; cursor:pointer; transition:0.3s; }
+button:hover { background:#45a049; color:white; }
+.login-section, .admin-panel, .student-panel, .quiz-section { background:white; margin:20px auto; padding:20px; border-radius:10px; max-width:700px; box-shadow:0 0 15px rgba(0,0,0,0.1);}
+h2,h3 { text-align:center; }
+input { padding:8px; margin:5px 0; width:100%; }
+.quiz-question { margin:10px 0; }
+.correct { color:green; font-weight:bold; }
+.incorrect { color:red; font-weight:bold; }
+footer { text-align:center; padding:15px; background:#222; color:white; }
+.note { background:#fffae6; padding:10px; border-left:5px solid #ff9900; margin-bottom:15px; }
+.hidden { display:none; }
+</style>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+</head>
+<body>
+
+<header>
+<h1>English Bloom Interactive</h1>
+<p>Created by: Rahul | <a href="https://www.facebook.com/yourfb" target="_blank">My Facebook</a></p>
+</header>
+
+<div class="login-section" id="loginCard">
+<h2>Login</h2>
+<select id="loginType">
+  <option value="student">Student</option>
+  <option value="admin">Admin</option>
+</select>
+<input type="text" id="username" placeholder="Email">
+<input type="password" id="password" placeholder="Password">
+<button onclick="performLogin()">Login</button>
+</div>
+
+<div class="admin-panel hidden" id="adminPanel">
+<h2>Admin Panel</h2>
+<div class="note">Add/Delete Students and Manage Quizzes</div>
+
+<h3>Quizzes</h3>
+<ul id="quizList"></ul>
+
+<h3>Add New Quiz Question</h3>
+<input type="text" id="newQuestionText" placeholder="Question text">
+<input type="text" id="newQuestionAnswer" placeholder="Answer">
+<select id="newQuestionCategory">
+<option value="Changing Sentences">Changing Sentences</option>
+<option value="Tag Questions">Tag Questions</option>
+</select>
+<button onclick="addQuizQuestion()">Add Quiz</button>
+
+<h3>AI Features</h3>
+<input type="text" id="aiQuestion" placeholder="Ask English question">
+<button onclick="askGemini()">Ask AI</button>
+<p id="aiAnswer"></p>
+<button onclick="generateAIQuizzes()">Generate AI Quizzes (5 Questions)</button>
+
+<button onclick="logout()">Logout</button>
+</div>
+
+<div class="student-panel hidden" id="studentPanel">
+<h2 id="greeting">Take Quiz</h2>
+<div id="quizContainer"></div>
+<p id="scoreDisplay"></p>
+<button onclick="logout()">Logout</button>
+</div>
+
+<footer>
+<p>Created by Rahul | <a href="https://www.facebook.com/yourfb" target="_blank">My FB</a></p>
+<p>Contact me to make your website free!</p>
+</footer>
+
+<script>
+// ===== Firebase Config =====
+const firebaseConfig = {
+  apiKey: "AIzaSyA5fs8uS87x4OQ-qc_qbY7YA7YR846uhSE",
+  authDomain: "english-bloom.firebaseapp.com",
+  projectId: "english-bloom",
+  storageBucket: "english-bloom.firebasestorage.app",
+  messagingSenderId: "821663678328",
+  appId: "1:821663678328:web:c0719559581f6cfd66d28d",
+  measurementId: "G-2TL7EMJP1Y"
+};
+const app = firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+// ===== USERS & QUIZZES =====
+let quizzes = [
+  {category:"Changing Sentences", questions:[
+    {question:"Hasan Sir is playing football. Did he like this?", answer:"Yes, he likes it."},
+    {question:"Momo is reading a book. Did she enjoy it?", answer:"Yes, she enjoyed it."},
+    {question:"Prionti is cooking dinner. Did she manage well?", answer:"Yes, she did."},
+    {question:"Ayat is singing a song. Did he like it?", answer:"Yes, he likes it."},
+    {question:"Sakib is drawing a picture. Did he finish it?", answer:"Yes, he finished it."},
+    {question:"Mrittika is dancing in class. Did she enjoy it?", answer:"Yes, she enjoyed it."},
+    {question:"Maida is writing a story. Did she complete it?", answer:"Yes, she completed it."}
+  ]},
+  {category:"Tag Questions", questions:[
+    {question:"Hasan Sir is tall, isn't he?", answer:"Yes, he is."},
+    {question:"Momo likes chocolate, doesn't she?", answer:"Yes, she does."},
+    {question:"Prionti can swim, can't she?", answer:"Yes, she can."},
+    {question:"Ayat is coming tomorrow, isn't he?", answer:"Yes, he is."},
+    {question:"Sakib plays football, doesn't he?", answer:"Yes, he does."},
+    {question:"Mrittika is happy, isn't she?", answer:"Yes, she is."},
+    {question:"Maida can dance well, can't she?", answer:"Yes, she can."}
+  ]}
+];
+
+// ===== LOGIN =====
+function performLogin(){
+  const type = document.getElementById('loginType').value;
+  const email = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value.trim();
+
+  auth.signInWithEmailAndPassword(email,password)
+  .then(userCredential=>{
+    alert("Login Success: "+email);
+    showPanel(type,email);
+  })
+  .catch(err=>{
+    alert("Login Failed: "+err.message);
+  });
+}
+
+function showPanel(type,email){
+  document.getElementById('loginCard').classList.add('hidden');
+  if(type==='admin') document.getElementById('adminPanel').classList.remove('hidden');
+  else{
+    document.getElementById('studentPanel').classList.remove('hidden');
+    document.getElementById('greeting').textContent="Welcome, "+email+"! Ready to test your English?";
+    startQuiz();
+  }
+}
+
+function logout(){
+  auth.signOut().then(()=>{
+    alert("Logged out!");
+    location.reload();
+  });
+}
+
+// Auto-login
+auth.onAuthStateChanged(user=>{
+  if(user){
+    const type = user.email==="rahul@gmail.com"?"admin":"student";
+    showPanel(type,user.email);
+  }
+});
+
+// ===== QUIZZES FUNCTIONS =====
+function shuffleQuizzes(){
+  quizzes.forEach(cat=>{
+    for(let i=cat.questions.length-1;i>0;i--){
+      let j=Math.floor(Math.random()*(i+1));
+      [cat.questions[i], cat.questions[j]]=[cat.questions[j], cat.questions[i]];
+    }
+  });
+}
+
+function startQuiz(){
+  shuffleQuizzes();
+  showQuiz();
+}
+
+function showQuiz(){
+  const container=document.getElementById('quizContainer');
+  container.innerHTML='';
+  quizzes.forEach(cat=>{
+    const h3=document.createElement('h3'); h3.textContent=cat.category;
+    container.appendChild(h3);
+    cat.questions.forEach((q,i)=>{
+      const div=document.createElement('div'); div.className='quiz-question';
+      div.innerHTML=`<b>Q${i+1}:</b> ${q.question} <br>
+      <input type="text" id="answer_${cat.category}_${i}" placeholder="Type your answer">
+      <button onclick="checkAnswer('${cat.category}',${i})">Check Answer</button>
+      <span id="result_${cat.category}_${i}"></span>`;
+      container.appendChild(div);
+    });
+  });
+  document.getElementById('scoreDisplay').textContent='';
+}
+
+function checkAnswer(catName,index){
+  const input=document.getElementById(`answer_${catName}_${index}`);
+  const span=document.getElementById(`result_${catName}_${index}`);
+  const cat=quizzes.find(c=>c.category===catName);
+  const correct=cat.questions[index].answer.trim().toLowerCase();
+  if(input.value.trim().toLowerCase()===correct){
+    span.textContent=" ✅ Correct"; span.className='correct';
+  } else {
+    span.textContent=" ❌ Incorrect (Answer: "+cat.questions[index].answer+")";
+    span.className='incorrect';
+  }
+  updateScore();
+}
+
+function updateScore(){
+  let total=0, correctCount=0;
+  quizzes.forEach(cat=>{
+    cat.questions.forEach((q,i)=>{
+      const span=document.getElementById(`result_${cat.category}_${i}`);
+      if(span && span.className==='correct') correctCount++;
+      total++;
+    });
+  });
+  document.getElementById('scoreDisplay').textContent=`Score: ${correctCount} / ${total}`;
+}
+
+function addQuizQuestion(){
+  const qText=document.getElementById('newQuestionText').value;
+  const qAnswer=document.getElementById('newQuestionAnswer').value;
+  const qCat=document.getElementById('newQuestionCategory').value;
+  if(qText && qAnswer){
+    const cat=quizzes.find(c=>c.category===qCat);
+    cat.questions.push({question:qText, answer:qAnswer});
+    updateQuizList();
+    document.getElementById('newQuestionText').value='';
+    document.getElementById('newQuestionAnswer').value='';
+    alert('Quiz added successfully!');
+  }
+}
+
+function updateQuizList(){
+  const list=document.getElementById('quizList'); list.innerHTML='';
+  quizzes.forEach((cat,i)=>{
+    const li=document.createElement('li'); li.textContent=cat.category+" ("+cat.questions.length+" questions)";
+    list.appendChild(li);
+  });
+}
+updateQuizList();
+
+// ===== GEMINI AI =====
+const GEMINI_API_KEY = "AIzaSyAdmyTR2AzXsbTV4NUbB72YDcOozB0XhtU";
+
+async function askGemini(){
+  const question=document.getElementById('aiQuestion').value;
+  if(!question){ alert("Type a question!"); return; }
+  document.getElementById('aiAnswer').textContent="Thinking...";
+  try{
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY},
+      body: JSON.stringify({contents:[{parts:[{text:question}]}]})
+    });
+    const data=await res.json();
+    const answer=data.candidates[0].content[0].text;
+    document.getElementById('aiAnswer').textContent=answer;
+  }catch(e){
+    document.getElementById('aiAnswer').textContent="Error: "+e.message;
+  }
+}
+
+// ===== GENERATE AI QUIZZES =====
+async function generateAIQuizzes(){
+  const category = prompt("Enter category for AI quizzes: Changing Sentences / Tag Questions");
+  if(!category) return;
+  const promptText=`Create 5 ${category} questions for English learners using names Hasan Sir, Momo, Prionti, Ayat, Sakib, Mrittika, Maida. Format as JSON [{"question":"...","answer":"..."}]`;
+
+  try{
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY},
+      body: JSON.stringify({contents:[{parts:[{text:promptText}]}]})
+    });
+    const data=await res.json();
+    const aiQuizzes=JSON.parse(data.candidates[0].content[0].text);
+    const catObj=quizzes.find(c=>c.category===category);
+    catObj.questions.push(...aiQuizzes);
+    updateQuizList();
+    alert("AI-generated quizzes added!");
+    startQuiz();
+  }catch(e){
+    alert("Error generating AI quizzes: "+e.message);
+  }
+}
+</script>
+
+</body>
+  </html>
